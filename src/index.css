@@ -2,41 +2,68 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* LifeDash Design System - Dark-first personal dashboard */
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Dark theme optimized for 24/7 Raspberry Pi display */
+    --background: 222 84% 3%;
+    --foreground: 210 40% 95%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card: 222 84% 4.5%;
+    --card-foreground: 210 40% 95%;
+    --card-border: 217 32% 12%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover: 222 84% 4.5%;
+    --popover-foreground: 210 40% 95%;
 
-    --primary: 222.2 47.4% 11.2%;
+    --primary: 142 76% 36%;
     --primary-foreground: 210 40% 98%;
+    --primary-glow: 142 76% 45%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217 32% 17.5%;
+    --secondary-foreground: 210 40% 95%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 217 32% 10%;
+    --muted-foreground: 215 20% 65%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 217 91% 60%;
+    --accent-foreground: 210 40% 98%;
 
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 217 32% 12%;
+    --input: 217 32% 12%;
+    --ring: 142 76% 36%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
+
+    /* LifeDash specific colors */
+    --fitness: 142 76% 36%;       /* Emerald for health */
+    --fitness-light: 142 76% 45%;
+    --finance: 217 91% 60%;       /* Blue for money */
+    --finance-light: 217 91% 70%;
+    --environment: 271 91% 65%;   /* Purple for environment */
+    --environment-light: 271 91% 75%;
+    --motivation: 45 93% 47%;     /* Amber for goals */
+    --motivation-light: 45 93% 57%;
+    
+    /* Chart colors */
+    --chart-1: 142 76% 36%;
+    --chart-2: 217 91% 60%;
+    --chart-3: 271 91% 65%;
+    --chart-4: 45 93% 47%;
+    --chart-5: 346 77% 49%;
+    
+    /* Gradients */
+    --gradient-dashboard: linear-gradient(135deg, hsl(var(--background)), hsl(222 84% 2%));
+    --gradient-card: linear-gradient(135deg, hsl(var(--card)), hsl(217 32% 6%));
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-glow)));
+    
+    /* Shadows */
+    --shadow-card: 0 4px 20px -4px hsl(var(--background) / 0.5);
+    --shadow-glow: 0 0 30px hsl(var(--primary-glow) / 0.2);
 
     --sidebar-background: 0 0% 98%;
 
@@ -100,6 +127,28 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans antialiased;
+    background: var(--gradient-dashboard);
+    min-height: 100vh;
+  }
+}
+
+@layer components {
+  .dashboard-card {
+    @apply bg-card border border-border rounded-xl shadow-sm backdrop-blur-sm;
+    background: var(--gradient-card);
+    box-shadow: var(--shadow-card);
+  }
+  
+  .metric-value {
+    @apply text-2xl font-bold tracking-tight;
+  }
+  
+  .metric-label {
+    @apply text-sm text-muted-foreground font-medium;
+  }
+  
+  .chart-container {
+    @apply w-full h-full;
   }
 }

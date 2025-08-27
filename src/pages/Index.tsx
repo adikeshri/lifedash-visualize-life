@@ -7,6 +7,7 @@ import MotivationModule from '@/components/dashboard/MotivationModule';
 
 const Index = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [motivationalQuote, setMotivationalQuote] = useState<string | null>(null);
   const userName = "Aditya"; // This could be dynamic in the future
 
   useEffect(() => {
@@ -16,6 +17,28 @@ const Index = () => {
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    let isActive = true;
+    const fetchQuote = async () => {
+      try {
+        const response = await fetch('https://quotes-api-self.vercel.app/quote');
+        if (!response.ok) return;
+        const data: { quote?: string; author?: string } = await response.json();
+        if (isActive && data?.quote) {
+          setMotivationalQuote(data.author ? `${data.quote} — ${data.author}` : data.quote);
+        }
+      } catch {
+        // ignore errors
+      }
+    };
+    fetchQuote();
+    const interval = setInterval(fetchQuote, 30 * 60 * 1000);
+    return () => {
+      isActive = false;
+      clearInterval(interval);
+    };
+  }, []);
+
   const getGreeting = () => {
     const hour = currentTime.getHours();
     if (hour < 12) return "Good morning";
@@ -23,15 +46,34 @@ const Index = () => {
     return "Good evening";
   };
 
-  const getMotivationalMessage = () => {
-    const messages = [
-      "Let's make today count! 💪",
-      "Every step forward is progress. 🚀",
-      "Your future self will thank you. ✨",
-      "Consistency builds empires. 🏆",
-      "Small wins, big results. 🎯"
-    ];
-    return messages[Math.floor(Math.random() * messages.length)];
+  const formatDate = (date) => {
+    const day = date.getDate();
+    const month = date.toLocaleString("en-GB", { month: "short" }); // Aug
+    const year = date.getFullYear();
+
+    const getOrdinal = (n) => {
+      if (n > 3 && n < 21) return "th";
+      switch (n % 10) {
+        case 1: return "st";
+        case 2: return "nd";
+        case 3: return "rd";
+        default: return "th";
+      }
+    };
+
+    return `${month} ${day}${getOrdinal(day)}, ${year}`;
+  };
+
+  const formatTime = (date) => {
+    return date.toLocaleString("en-US", {
+      hour: "numeric",
+      minute: "numeric",
+      hour12: true,
+    });
+  };
+
+  const formatDay = (date) => {
+    return date.toLocaleString("en-US", { weekday: "long" });
   };
 
   return (
@@ -39,20 +81,20 @@ const Index = () => {
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <header className="dashboard-card p-6">
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="space-y-1 flex-1 min-w-0">
               <div className="flex items-center gap-3">
                 <User className="h-6 w-6 text-primary" />
                 <h1 className="text-3xl font-bold">
                   {getGreeting()}, {userName}
                 </h1>
               </div>
-              <p className="text-muted-foreground">{getMotivationalMessage()}</p>
+              <p className="text-muted-foreground whitespace-normal break-words max-w-full leading-snug">{motivationalQuote ?? ""}</p>
             </div>
-            <div className="flex items-center gap-2 text-lg font-mono">
+            <div className="flex items-center gap-2 text-lg font-mono flex-none whitespace-nowrap">
               <Clock className="h-5 w-5 text-primary" />
               <time>
-                {currentTime.toLocaleDateString()} • {currentTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                {formatDay(currentTime)} - {formatDate(currentTime)}  • {formatTime(currentTime)}
               </time>
             </div>
           </div>

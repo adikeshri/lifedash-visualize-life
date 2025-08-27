@@ -51,7 +51,7 @@ const FitnessModule = () => {
         </div>
         <div>
           <h2 className="text-xl font-bold">Fitness Overview</h2>
-          <p className="text-sm text-muted-foreground">Track your health journey</p>
+          <p className="text-sm text-muted-foreground">You health journey</p>
         </div>
       </div>
 
@@ -63,7 +63,7 @@ const FitnessModule = () => {
               <Heart className="h-4 w-4 text-fitness" />
               <span className="metric-label">Weight</span>
             </div>
-            <span className="metric-value text-fitness">74.3kg</span>
+            <span className="metric-value text-fitness">64.3kg</span>
           </div>
           <div className="h-24">
             <ResponsiveContainer width="100%" height="100%">
@@ -95,7 +95,7 @@ const FitnessModule = () => {
               <Activity className="h-4 w-4 text-fitness" />
               <span className="metric-label">Calories</span>
             </div>
-            <span className="metric-value text-fitness">1,900</span>
+            <span className="metric-value text-fitness">2,790</span>
           </div>
           <div className="h-24">
             <ResponsiveContainer width="100%" height="100%">
@@ -121,7 +121,7 @@ const FitnessModule = () => {
               <Moon className="h-4 w-4 text-fitness" />
               <span className="metric-label">Sleep</span>
             </div>
-            <span className="metric-value text-fitness">8.0h</span>
+            <span className="metric-value text-fitness">7.5h</span>
           </div>
           <div className="h-24">
             <ResponsiveContainer width="100%" height="100%">
@@ -152,7 +152,7 @@ const FitnessModule = () => {
               <Footprints className="h-4 w-4 text-fitness" />
               <span className="metric-label">Steps</span>
             </div>
-            <span className="metric-value text-fitness">7,800</span>
+            <span className="metric-value text-fitness">7,827</span>
           </div>
           <div className="h-24">
             <ResponsiveContainer width="100%" height="100%">

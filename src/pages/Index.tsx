@@ -81,17 +81,17 @@ const Index = () => {
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <header className="dashboard-card p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="space-y-1 flex-1 min-w-0">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
               <div className="flex items-center gap-3">
                 <User className="h-6 w-6 text-primary" />
                 <h1 className="text-3xl font-bold">
                   {getGreeting()}, {userName}
                 </h1>
               </div>
-              <p className="text-muted-foreground whitespace-normal break-words max-w-full leading-snug">{motivationalQuote ?? ""}</p>
+              <p className="text-muted-foreground">{motivationalQuote ?? ""}</p>
             </div>
-            <div className="flex items-center gap-2 text-lg font-mono flex-none whitespace-nowrap">
+            <div className="flex items-center gap-2 text-lg font-mono">
               <Clock className="h-5 w-5 text-primary" />
               <time>
                 {formatDay(currentTime)} - {formatDate(currentTime)}  • {formatTime(currentTime)}

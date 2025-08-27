@@ -20,7 +20,7 @@ const FinanceModule = () => {
     { category: 'Bills', amount: 1200 },
   ];
 
-  const currentPortfolio = 32800;
+  const currentPortfolio = 2875890;
   const monthlyChange = 1600;
   const totalSpending = spendingData.reduce((sum, item) => sum + item.amount, 0);
 
@@ -45,8 +45,8 @@ const FinanceModule = () => {
               <span className="metric-label">Portfolio</span>
             </div>
             <div className="text-right">
-              <div className="metric-value text-finance">${currentPortfolio.toLocaleString()}</div>
-              <div className="text-xs text-finance-light">+${monthlyChange}</div>
+              <div className="metric-value text-finance">₹{currentPortfolio.toLocaleString()}</div>
+              <div className="text-xs text-finance-light">+₹{monthlyChange}</div>
             </div>
           </div>
           <div className="h-24">
@@ -66,7 +66,7 @@ const FinanceModule = () => {
                     border: '1px solid hsl(var(--border))',
                     borderRadius: '8px'
                   }}
-                  formatter={(value) => [`$${value.toLocaleString()}`, 'Portfolio']}
+                  formatter={(value) => [`₹${value.toLocaleString()}`, 'Portfolio']}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -80,7 +80,7 @@ const FinanceModule = () => {
               <CreditCard className="h-4 w-4 text-finance" />
               <span className="metric-label">Monthly Spending</span>
             </div>
-            <span className="metric-value text-finance">${totalSpending.toLocaleString()}</span>
+            <span className="metric-value text-finance">₹{totalSpending.toLocaleString()}</span>
           </div>
           <div className="h-24">
             <ResponsiveContainer width="100%" height="100%">
@@ -92,7 +92,7 @@ const FinanceModule = () => {
                     border: '1px solid hsl(var(--border))',
                     borderRadius: '8px'
                   }}
-                  formatter={(value) => [`$${value}`, 'Amount']}
+                  formatter={(value) => [`₹${value}`, 'Amount']}
                 />
               </BarChart>
             </ResponsiveContainer>

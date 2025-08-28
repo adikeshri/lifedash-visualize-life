@@ -1,4 +1,4 @@
-import { Cloud, Thermometer, Wind, Droplets, Sun, Sunset, Loader2, MapPin, AlertCircle, RefreshCw } from 'lucide-react';
+import { Cloud, Thermometer, Wind, Droplets, Sun, Sunset, Loader2, MapPin, AlertCircle, RefreshCw, Mountain, CloudDrizzle, CloudRain, CloudSnow, CloudFog, CloudSun, CloudLightning } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer, Tooltip, AreaChart, Area } from 'recharts';
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -24,11 +24,21 @@ interface WeatherData {
 }
 
 interface AirQualityData {
-  list: Array<{
-    main: {
-      aqi: number;
-    };
-  }>;
+  elevation?: number;
+  current?: {
+    us_aqi?: number; // US AQI as provided by Open-Meteo
+    pm2_5?: number; // µg/m³
+    pm10?: number; // µg/m³
+    ozone?: number; // µg/m³
+    nitrogen_dioxide?: number; // µg/m³
+    sulphur_dioxide?: number; // µg/m³
+    carbon_monoxide?: number; // µg/m³
+  };
+  hourly?: {
+    time: string[];
+    pm2_5?: number[];
+    us_aqi?: number[];
+  };
 }
 
 // Default fallback coordinates (Bangalore, India)
@@ -44,6 +54,7 @@ const EnvironmentModule = () => {
   const [locationName, setLocationName] = useState<string>('');
   const [isUsingDefaultLocation, setIsUsingDefaultLocation] = useState<boolean>(false);
   const [locationError, setLocationError] = useState<string | null>(null);
+  // Always use CPCB method for AQI calculation
 
   // Function to fetch location name from coordinates
   const fetchLocationName = async (lat: number, lon: number) => {
@@ -181,31 +192,29 @@ const EnvironmentModule = () => {
     retry: 2,
   });
 
-  // Fetch air quality data
+  // Fetch air quality data (Open-Meteo Air Quality API)
   const { data: aqiData, isLoading: aqiLoading, error: aqiError } = useQuery({
     queryKey: ['aqi', location],
     queryFn: async (): Promise<AirQualityData> => {
       if (!location) throw new Error('No location');
-      
-      // TODO: Configure OpenWeatherMap API key in environment variables
-      // Current API call has empty appid - will fail without proper configuration
-      const response = await fetch(
-        `https://api.openweathermap.org/data/3.0/air_pollution?lat=${location.lat}&lon=${location.lon}&appid={}`
-      );
-      
+      const params = new URLSearchParams({
+        latitude: String(location.lat),
+        longitude: String(location.lon),
+        current: 'pm2_5,pm10,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone,us_aqi',
+        hourly: 'pm2_5,us_aqi',
+        timezone: 'auto',
+      });
+      const response = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?${params.toString()}`);
       if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error('OpenWeatherMap API key not configured');
-        }
         throw new Error('Failed to fetch air quality data');
       }
-      
       return response.json();
     },
     enabled: !!location,
     refetchInterval: 600000, // Refetch every 10 minutes
     retry: 2,
   });
+
 
   // Process weather data for charts
   const getTemperatureChartData = () => {
@@ -223,31 +232,184 @@ const EnvironmentModule = () => {
       }));
   };
 
+  // --- India CPCB AQI calculation helpers ---
+  type AQIResult = { aqi: number; pollutant: string | null };
+
+  const roundTo = (value: number, decimals: number) => {
+    const p = Math.pow(10, decimals);
+    return Math.round(value * p) / p;
+  };
+
+  type Breakpoint = { Clow: number; Chigh: number; Ilow: number; Ihigh: number };
+
+  const calcAQISegment = (C: number, segments: Breakpoint[]): number | null => {
+    for (const seg of segments) {
+      if (C >= seg.Clow && C <= seg.Chigh) {
+        const { Clow, Chigh, Ilow, Ihigh } = seg;
+        return roundTo(((Ihigh - Ilow) / (Chigh - Clow)) * (C - Clow) + Ilow, 0);
+      }
+    }
+    // If above highest breakpoint provided, cap at 500
+    const last = segments[segments.length - 1];
+    if (last && C > last.Chigh) return 500;
+    return null;
+  };
+
+  const computeIndiaAQI = (components?: {
+    co?: number; no?: number; no2?: number; o3?: number; so2?: number; pm2_5?: number; pm10?: number; nh3?: number;
+  }): AQIResult => {
+    if (!components) return { aqi: NaN, pollutant: null };
+
+    const aqiValues: { pollutant: string; aqi: number }[] = [];
+
+    // PM2.5 (µg/m³) CPCB (24-hr)
+    if (typeof components.pm2_5 === 'number') {
+      const C = roundTo(components.pm2_5, 1);
+      const segments: Breakpoint[] = [
+        { Clow: 0.0, Cligh: 30.0, Ilow: 0, Ihigh: 50 },
+        { Clow: 31.0, Cligh: 60.0, Ilow: 51, Ihigh: 100 },
+        { Clow: 61.0, Cligh: 90.0, Ilow: 101, Ihigh: 200 },
+        { Clow: 91.0, Cligh: 120.0, Ilow: 201, Ihigh: 300 },
+        { Clow: 121.0, Cligh: 250.0, Ilow: 301, Ihigh: 400 },
+        { Clow: 251.0, Cligh: 1000000.0, Ilow: 401, Ihigh: 500 },
+      ].map(({ Clow, Cligh, Ilow, Ihigh }) => ({ Clow, Chigh: Cligh, Ilow, Ihigh }));
+      const a = calcAQISegment(C, segments);
+      if (a !== null) aqiValues.push({ pollutant: 'PM2.5', aqi: a });
+    }
+
+    // PM10 (µg/m³) CPCB (24-hr)
+    if (typeof components.pm10 === 'number') {
+      const C = Math.round(components.pm10); // truncate to integer per EPA
+      const segments: Breakpoint[] = [
+        { Clow: 0, Cligh: 50, Ilow: 0, Ihigh: 50 },
+        { Clow: 51, Cligh: 100, Ilow: 51, Ihigh: 100 },
+        { Clow: 101, Cligh: 250, Ilow: 101, Ihigh: 200 },
+        { Clow: 251, Cligh: 350, Ilow: 201, Ihigh: 300 },
+        { Clow: 351, Cligh: 430, Ilow: 301, Ihigh: 400 },
+        { Clow: 431, Cligh: 1000000, Ilow: 401, Ihigh: 500 },
+      ].map(({ Clow, Cligh, Ilow, Ihigh }) => ({ Clow, Chigh: Cligh, Ilow, Ihigh }));
+      const a = calcAQISegment(C, segments);
+      if (a !== null) aqiValues.push({ pollutant: 'PM10', aqi: a });
+    }
+
+    // O3 (µg/m³) CPCB (8-hr)
+    if (typeof components.o3 === 'number') {
+      const segments: Breakpoint[] = [
+        { Clow: 0, Cligh: 50, Ilow: 0, Ihigh: 50 },
+        { Clow: 51, Cligh: 100, Ilow: 51, Ihigh: 100 },
+        { Clow: 101, Cligh: 168, Ilow: 101, Ihigh: 200 },
+        { Clow: 169, Cligh: 208, Ilow: 201, Ihigh: 300 },
+        { Clow: 209, Cligh: 748, Ilow: 301, Ihigh: 400 },
+        { Clow: 749, Cligh: 1000000, Ilow: 401, Ihigh: 500 },
+      ].map(({ Clow, Cligh, Ilow, Ihigh }) => ({ Clow, Chigh: Cligh, Ilow, Ihigh }));
+      const a = calcAQISegment(components.o3, segments);
+      if (a !== null) aqiValues.push({ pollutant: 'O3', aqi: a });
+    }
+
+    // NO2 (µg/m³) CPCB (24-hr)
+    if (typeof components.no2 === 'number') {
+      const segments: Breakpoint[] = [
+        { Clow: 0, Cligh: 40, Ilow: 0, Ihigh: 50 },
+        { Clow: 41, Cligh: 80, Ilow: 51, Ihigh: 100 },
+        { Clow: 81, Cligh: 180, Ilow: 101, Ihigh: 200 },
+        { Clow: 181, Cligh: 280, Ilow: 201, Ihigh: 300 },
+        { Clow: 281, Cligh: 400, Ilow: 301, Ihigh: 400 },
+        { Clow: 401, Cligh: 1000000, Ilow: 401, Ihigh: 500 },
+      ].map(({ Clow, Cligh, Ilow, Ihigh }) => ({ Clow, Chigh: Cligh, Ilow, Ihigh }));
+      const a = calcAQISegment(components.no2, segments);
+      if (a !== null) aqiValues.push({ pollutant: 'NO2', aqi: a });
+    }
+
+    // SO2 (µg/m³) CPCB (24-hr)
+    if (typeof components.so2 === 'number') {
+      const segments: Breakpoint[] = [
+        { Clow: 0, Cligh: 40, Ilow: 0, Ihigh: 50 },
+        { Clow: 41, Cligh: 80, Ilow: 51, Ihigh: 100 },
+        { Clow: 81, Cligh: 380, Ilow: 101, Ihigh: 200 },
+        { Clow: 381, Cligh: 800, Ilow: 201, Ihigh: 300 },
+        { Clow: 801, Cligh: 1600, Ilow: 301, Ihigh: 400 },
+        { Clow: 1601, Cligh: 1000000, Ilow: 401, Ihigh: 500 },
+      ].map(({ Clow, Cligh, Ilow, Ihigh }) => ({ Clow, Chigh: Cligh, Ilow, Ihigh }));
+      const a = calcAQISegment(components.so2, segments);
+      if (a !== null) aqiValues.push({ pollutant: 'SO2', aqi: a });
+    }
+
+    // CO (mg/m³) CPCB (8-hr) – OWM gives µg/m³, convert to mg/m³
+    if (typeof components.co === 'number') {
+      const mgm3 = roundTo(components.co / 1000, 1);
+      const segments: Breakpoint[] = [
+        { Clow: 0.0, Cligh: 1.0, Ilow: 0, Ihigh: 50 },
+        { Clow: 1.1, Cligh: 2.0, Ilow: 51, Ihigh: 100 },
+        { Clow: 2.1, Cligh: 10.0, Ilow: 101, Ihigh: 200 },
+        { Clow: 10.1, Cligh: 17.0, Ilow: 201, Ihigh: 300 },
+        { Clow: 17.1, Cligh: 34.0, Ilow: 301, Ihigh: 400 },
+        { Clow: 34.1, Cligh: 1000000.0, Ilow: 401, Ihigh: 500 },
+      ].map(({ Clow, Cligh, Ilow, Ihigh }) => ({ Clow, Chigh: Cligh, Ilow, Ihigh }));
+      const a = calcAQISegment(mgm3, segments);
+      if (a !== null) aqiValues.push({ pollutant: 'CO', aqi: a });
+    }
+
+    // NH3 (µg/m³) CPCB (24-hr)
+    if (typeof components.nh3 === 'number') {
+      const segments: Breakpoint[] = [
+        { Clow: 0, Cligh: 200, Ilow: 0, Ihigh: 50 },
+        { Clow: 201, Cligh: 400, Ilow: 51, Ihigh: 100 },
+        { Clow: 401, Cligh: 800, Ilow: 101, Ihigh: 200 },
+        { Clow: 801, Cligh: 1200, Ilow: 201, Ihigh: 300 },
+        { Clow: 1201, Cligh: 1800, Ilow: 301, Ihigh: 400 },
+        { Clow: 1801, Cligh: 1000000, Ilow: 401, Ihigh: 500 },
+      ].map(({ Clow, Cligh, Ilow, Ihigh }) => ({ Clow, Chigh: Cligh, Ilow, Ihigh }));
+      const a = calcAQISegment(components.nh3, segments);
+      if (a !== null) aqiValues.push({ pollutant: 'NH3', aqi: a });
+    }
+
+    if (aqiValues.length === 0) return { aqi: NaN, pollutant: null };
+    const dominant = aqiValues.reduce((max, cur) => (cur.aqi > max.aqi ? cur : max));
+    return { aqi: dominant.aqi, pollutant: dominant.pollutant };
+  };
+
+  const computedAqi: AQIResult | null = aqiData?.current
+    ? computeIndiaAQI({
+        co: aqiData.current.carbon_monoxide,
+        no2: aqiData.current.nitrogen_dioxide,
+        o3: aqiData.current.ozone,
+        so2: aqiData.current.sulphur_dioxide,
+        pm2_5: aqiData.current.pm2_5,
+        pm10: aqiData.current.pm10,
+      })
+    : null;
+
+  // Removed GOOGLE_LIKE (US EPA NowCast) calculation; using CPCB only
+
   const getAQIChartData = () => {
-    if (!aqiData?.list) return [];
-    
-    // Generate mock AQI data for the last 24 hours since we only get current AQI
+    const times = aqiData?.hourly?.time;
+    const usAqiSeries = aqiData?.hourly?.us_aqi;
+    if (times && usAqiSeries) {
+      const points: { time: string; aqi: number }[] = [];
+      const len = times.length;
+      const start = Math.max(0, len - 24);
+      for (let i = len - 1; i >= start; i -= 3) {
+        const label = new Date(times[i]).toLocaleTimeString('en-US', { hour: 'numeric', hour12: true });
+        const value = usAqiSeries[i];
+        if (typeof value === 'number') {
+          points.push({ time: label, aqi: Math.round(value) });
+        }
+        if (points.length >= 8) break;
+      }
+      return points.reverse();
+    }
+    // Fallback: generate slight variation around current CPCB value
     const now = new Date();
-    const hours = [];
-    const aqiValues = [];
-    
+    const hours: string[] = [];
+    const aqiValues: number[] = [];
     for (let i = 23; i >= 0; i -= 3) {
       const time = new Date(now.getTime() - i * 60 * 60 * 1000);
-      hours.push(time.toLocaleTimeString('en-US', { 
-        hour: 'numeric', 
-        hour12: true 
-      }));
-      
-      // Generate realistic AQI variation around the current value
-      const currentAQI = aqiData.list[0]?.main.aqi || 50;
-      const variation = Math.random() * 20 - 10;
-      aqiValues.push(Math.max(0, Math.round(currentAQI + variation)));
+      hours.push(time.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true }));
+      const base = computedAqi?.aqi ?? 50;
+      const variation = Math.random() * 14 - 7;
+      aqiValues.push(Math.max(0, Math.round(base + variation)));
     }
-    
-    return hours.map((time, index) => ({
-      time,
-      aqi: aqiValues[index]
-    }));
+    return hours.map((time, index) => ({ time, aqi: aqiValues[index] }));
   };
 
   const getWeatherCondition = (code: number) => {
@@ -272,7 +434,29 @@ const EnvironmentModule = () => {
     return conditions[code] || 'Unknown';
   };
 
-  const getAQILevel = (aqi: number) => {
+  const getWeatherIcon = (code: number) => {
+    if (code === 0) return Sun; // Clear
+    if (code === 1) return CloudSun; // Mainly clear
+    if (code === 2) return CloudSun; // Partly cloudy
+    if (code === 3) return Cloud; // Overcast
+    if (code === 45 || code === 48) return CloudFog; // Fog
+    if (code === 51 || code === 53 || code === 55) return CloudDrizzle; // Drizzle
+    if (code === 61 || code === 63 || code === 65) return CloudRain; // Rain
+    if (code === 71 || code === 73 || code === 75) return CloudSnow; // Snow
+    if (code === 95) return CloudLightning; // Thunderstorm
+    return Cloud;
+  };
+
+  const getAQILevelCPCB = (aqi: number) => {
+    if (aqi <= 50) return { level: "Good", color: "text-green-600" };
+    if (aqi <= 100) return { level: "Satisfactory", color: "text-lime-600" };
+    if (aqi <= 200) return { level: "Moderately Polluted", color: "text-yellow-600" };
+    if (aqi <= 300) return { level: "Poor", color: "text-orange-600" };
+    if (aqi <= 400) return { level: "Very Poor", color: "text-red-600" };
+    return { level: "Severe", color: "text-red-800" };
+  };
+
+  const getAQILevelUS = (aqi: number) => {
     if (aqi <= 50) return { level: "Good", color: "text-green-600" };
     if (aqi <= 100) return { level: "Moderate", color: "text-yellow-600" };
     if (aqi <= 150) return { level: "Unhealthy for Sensitive", color: "text-orange-600" };
@@ -349,8 +533,9 @@ const EnvironmentModule = () => {
     high: hasWeatherData ? Math.round(weatherData.daily.temperature_2m_max[0]) : null,
     low: hasWeatherData ? Math.round(weatherData.daily.temperature_2m_min[0]) : null,
     humidity: hasWeatherData ? weatherData.current.relative_humidity_2m : null,
-    aqi: hasAQIData ? aqiData.list[0]?.main.aqi : null,
+    aqi: hasAQIData ? computedAqi?.aqi ?? null : null,
     condition: hasWeatherData ? getWeatherCondition(weatherData.current.weather_code) : null,
+    conditionCode: hasWeatherData ? weatherData.current.weather_code : null,
     rainChance: hasWeatherData ? weatherData.current.precipitation_probability : null,
     sunrise: hasWeatherData ? new Date(weatherData.daily.sunrise[0]).toLocaleTimeString('en-US', { 
       hour: 'numeric', 
@@ -364,7 +549,8 @@ const EnvironmentModule = () => {
     }) : null
   };
 
-  const aqiInfo = currentWeather.aqi ? getAQILevel(currentWeather.aqi) : null;
+  const activeAqi = computedAqi?.aqi ?? null;
+  const aqiInfo = activeAqi !== null && activeAqi !== undefined ? getAQILevelCPCB(activeAqi) : null;
   const temperatureChartData = getTemperatureChartData();
   const aqiChartData = getAQIChartData();
 
@@ -451,7 +637,7 @@ const EnvironmentModule = () => {
                 <span className="metric-label">Air Quality</span>
               </div>
               <div className="text-right">
-                <div className="metric-value text-environment">{currentWeather.aqi}</div>
+                <div className="metric-value text-environment">{activeAqi ?? currentWeather.aqi ?? '-'}</div>
                 {aqiInfo && (
                   <div className={`text-xs ${aqiInfo.color}`}>{aqiInfo.level}</div>
                 )}
@@ -487,7 +673,13 @@ const EnvironmentModule = () => {
         {hasWeatherData && currentWeather.condition && (
           <div className="text-center py-3 bg-muted/30 rounded-lg">
             <p className="text-sm text-muted-foreground mb-1">Current Conditions</p>
-            <p className="font-medium">{currentWeather.condition}</p>
+            <div className="flex items-center justify-center gap-2">
+              {currentWeather.conditionCode !== null && (() => {
+                const Icon = getWeatherIcon(currentWeather.conditionCode as number);
+                return <Icon className="h-4 w-4 text-environment" />;
+              })()}
+              <p className="font-medium">{currentWeather.condition}</p>
+            </div>
           </div>
         )}
 
@@ -502,6 +694,15 @@ const EnvironmentModule = () => {
                     <span className="text-xs text-muted-foreground">Humidity</span>
                   </div>
                   <span className="text-sm font-medium">{currentWeather.humidity}%</span>
+                </div>
+              )}
+              {hasAQIData && typeof aqiData?.elevation === 'number' && (
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Mountain className="h-3 w-3 text-environment" />
+                    <span className="text-xs text-muted-foreground">Elevation</span>
+                  </div>
+                  <span className="text-sm font-medium">{Math.round(aqiData.elevation)} m</span>
                 </div>
               )}
               {hasWeatherData && currentWeather.sunrise && (
@@ -563,12 +764,7 @@ const EnvironmentModule = () => {
         {aqiError && !hasAQIData && (
           <div className="text-center py-3 bg-destructive/10 rounded-lg">
             <AlertCircle className="h-4 w-4 mx-auto mb-2 text-destructive" />
-            <p className="text-xs text-destructive">
-              {aqiError.message === 'OpenWeatherMap API key not configured' 
-                ? 'Air quality data unavailable (API key needed)' 
-                : 'Air quality data unavailable'
-              }
-            </p>
+            <p className="text-xs text-destructive">Air quality data unavailable</p>
           </div>
         )}
       </div>
